@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlusCircle, Sparkles, User, RefreshCw, Send, ShieldCheck } from 'lucide-react';
+import { PlusCircle, Sparkles, User, RefreshCw, Send, ShieldCheck, Wallet } from 'lucide-react';
 import { UserProfile, UserBalances } from '../types';
 import { apiFetch } from '../utils/api';
 
@@ -9,6 +9,8 @@ interface HeaderNavProps {
   onBalanceUpdate: (balances: UserBalances) => void;
   telegramUserId: number;
   onSwitchUser: (id: number) => void;
+  onOpenAdmin?: () => void;
+  onOpenDeposit?: () => void;
 }
 
 export function HeaderNav({
@@ -17,6 +19,8 @@ export function HeaderNav({
   onBalanceUpdate,
   telegramUserId,
   onSwitchUser,
+  onOpenAdmin,
+  onOpenDeposit,
 }: HeaderNavProps) {
   const [isFauceting, setIsFauceting] = useState<boolean>(false);
   const [faucetMsg, setFaucetMsg] = useState<string>('');
@@ -66,17 +70,47 @@ export function HeaderNav({
           </div>
         </div>
 
-        {/* Faucet Top-up button */}
-        <button
-          type="button"
-          id="faucet-button"
-          onClick={handleFaucet}
-          disabled={isFauceting}
-          className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1 transition active:scale-95 shadow-sm"
-        >
-          <PlusCircle className="w-3.5 h-3.5" />
-          <span>{isFauceting ? 'Adding...' : 'Faucet'}</span>
-        </button>
+        <div className="flex items-center gap-1.5">
+          {/* Deposit Button */}
+          {onOpenDeposit && (
+            <button
+              type="button"
+              id="header-deposit-button"
+              onClick={onOpenDeposit}
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1 transition active:scale-95 shadow-sm"
+              title="Deposit Coins"
+            >
+              <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Deposit</span>
+            </button>
+          )}
+
+          {/* Admin Dashboard button */}
+          {onOpenAdmin && (
+            <button
+              type="button"
+              id="header-admin-button"
+              onClick={onOpenAdmin}
+              className="px-2.5 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-bold flex items-center gap-1 transition active:scale-95 shadow-sm"
+              title="Open Operator Admin Dashboard"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+              <span>Admin</span>
+            </button>
+          )}
+
+          {/* Faucet Top-up button */}
+          <button
+            type="button"
+            id="faucet-button"
+            onClick={handleFaucet}
+            disabled={isFauceting}
+            className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1 transition active:scale-95 shadow-sm"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>{isFauceting ? 'Adding...' : 'Faucet'}</span>
+          </button>
+        </div>
       </div>
 
       {faucetMsg && (

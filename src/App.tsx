@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Dices, Award, Ticket, ShieldCheck, HelpCircle } from 'lucide-react';
+import { Dices, Award, Ticket, ShieldCheck, HelpCircle, Users, Gift } from 'lucide-react';
 import { HeaderNav } from './components/HeaderNav';
 import { SpinnerWheel } from './components/SpinnerWheel';
 import { ScheduledLottery } from './components/ScheduledLottery';
 import { ProvablyFairAudit } from './components/ProvablyFairAudit';
 import { UserTicketsModal } from './components/UserTicketsModal';
+import { AdminDashboard } from './components/AdminDashboard';
+import { ReferralCenter } from './components/ReferralCenter';
+import { DepositModal } from './components/DepositModal';
 import { UserProfile, UserBalances } from './types';
 import { apiFetch } from './utils/api';
 
-type ActiveTab = 'SPINNER' | 'LOTTERY' | 'AUDIT';
+type ActiveTab = 'SPINNER' | 'LOTTERY' | 'REFERRAL' | 'AUDIT';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('SPINNER');
+  const [isAdminView, setIsAdminView] = useState<boolean>(false);
   const [telegramUserId, setTelegramUserId] = useState<number>(7770001);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [balances, setBalances] = useState<UserBalances>({
@@ -19,7 +23,9 @@ export default function App() {
     stars: 20,
     free_tickets: 3,
   });
+  const [initData, setInitData] = useState<string>('');
   const [isTicketsModalOpen, setIsTicketsModalOpen] = useState<boolean>(false);
+  const [isDepositModalOpen, setIsDepositModalOpen] = useState<boolean>(false);
 
   // Verification pre-fill state
   const [auditParams, setAuditParams] = useState<{
@@ -42,13 +48,14 @@ export default function App() {
         tg.expand?.();
       }
 
-      const initData = tg?.initData || '';
+      const rawInitData = tg?.initData || '';
+      setInitData(rawInitData);
 
       const json = await apiFetch<UserProfile>('/api/v1/auth/telegram', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: initData ? `Bearer ${initData}` : '',
+          Authorization: rawInitData ? `Bearer ${rawInitData}` : '',
           'x-telegram-user-id': userId.toString(),
         },
       });
@@ -77,6 +84,15 @@ export default function App() {
     setActiveTab('AUDIT');
   };
 
+  if (isAdminView) {
+    return (
+      <AdminDashboard
+        onBackToApp={() => setIsAdminView(false)}
+        onRefreshUserData={() => authenticateUser(telegramUserId)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-blue-600 selection:text-white">
       {/* Top Telegram Header & Balances */}
@@ -86,12 +102,15 @@ export default function App() {
         onBalanceUpdate={setBalances}
         telegramUserId={telegramUserId}
         onSwitchUser={handleSwitchUser}
+        onOpenAdmin={() => setIsAdminView(true)}
+        onOpenDeposit={() => setIsDepositModalOpen(true)}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-md mx-auto px-3 pt-2 pb-20">
         {activeTab === 'SPINNER' && (
           <SpinnerWheel
+            initData={initData}
             balances={balances}
             onBalanceUpdate={setBalances}
             onNavigateToVerifier={handleNavigateToVerifier}
@@ -105,6 +124,15 @@ export default function App() {
             onBalanceUpdate={setBalances}
             telegramUserId={telegramUserId}
             onViewMyTickets={() => setIsTicketsModalOpen(true)}
+          />
+        )}
+
+        {activeTab === 'REFERRAL' && (
+          <ReferralCenter
+            telegramUserId={telegramUserId}
+            balances={balances}
+            onBalanceUpdate={setBalances}
+            onOpenDeposit={() => setIsDepositModalOpen(true)}
           />
         )}
 
@@ -125,9 +153,17 @@ export default function App() {
         telegramUserId={telegramUserId}
       />
 
+      {/* Deposit Modal */}
+      <DepositModal
+        isOpen={isDepositModalOpen}
+        onClose={() => setIsDepositModalOpen(false)}
+        telegramUserId={telegramUserId}
+        onSuccess={setBalances}
+      />
+
       {/* Telegram Mini App Bottom Navigation Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800">
-        <div className="max-w-md mx-auto grid grid-cols-4 h-16">
+        <div className="max-w-md mx-auto grid grid-cols-5 h-16">
           {/* Spinner Tab */}
           <button
             type="button"
@@ -138,9 +174,9 @@ export default function App() {
             }`}
           >
             <Dices className="w-5 h-5" />
-            <span className="text-[11px]">Instant Wheel</span>
+            <span className="text-[10px]">Wheel</span>
             {activeTab === 'SPINNER' && (
-              <span className="absolute bottom-1 w-8 h-1 rounded-full bg-blue-500" />
+              <span className="absolute bottom-1 w-6 h-1 rounded-full bg-blue-500" />
             )}
           </button>
 
@@ -154,9 +190,30 @@ export default function App() {
             }`}
           >
             <Award className="w-5 h-5" />
-            <span className="text-[11px]">Lotteries</span>
+            <span className="text-[10px]">Lottery</span>
             {activeTab === 'LOTTERY' && (
-              <span className="absolute bottom-1 w-8 h-1 rounded-full bg-amber-400" />
+              <span className="absolute bottom-1 w-6 h-1 rounded-full bg-amber-400" />
+            )}
+          </button>
+
+          {/* Referral & 10% Earn Tab */}
+          <button
+            type="button"
+            id="tab-referrals"
+            onClick={() => setActiveTab('REFERRAL')}
+            className={`flex flex-col items-center justify-center gap-1 transition relative ${
+              activeTab === 'REFERRAL' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="relative">
+              <Users className="w-5 h-5" />
+              <span className="absolute -top-1 -right-2 px-1 py-0.2 rounded-full bg-amber-500 text-slate-950 font-black text-[8px] leading-tight">
+                10%
+              </span>
+            </div>
+            <span className="text-[10px]">Referrals</span>
+            {activeTab === 'REFERRAL' && (
+              <span className="absolute bottom-1 w-6 h-1 rounded-full bg-emerald-400" />
             )}
           </button>
 
@@ -168,7 +225,7 @@ export default function App() {
             className="flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-slate-200 transition"
           >
             <Ticket className="w-5 h-5" />
-            <span className="text-[11px]">My Tickets</span>
+            <span className="text-[10px]">Tickets</span>
           </button>
 
           {/* Audit Tab */}
@@ -177,13 +234,13 @@ export default function App() {
             id="tab-audit"
             onClick={() => setActiveTab('AUDIT')}
             className={`flex flex-col items-center justify-center gap-1 transition relative ${
-              activeTab === 'AUDIT' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+              activeTab === 'AUDIT' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <ShieldCheck className="w-5 h-5" />
-            <span className="text-[11px]">Fairness</span>
+            <span className="text-[10px]">Fairness</span>
             {activeTab === 'AUDIT' && (
-              <span className="absolute bottom-1 w-8 h-1 rounded-full bg-emerald-400" />
+              <span className="absolute bottom-1 w-6 h-1 rounded-full bg-purple-400" />
             )}
           </button>
         </div>

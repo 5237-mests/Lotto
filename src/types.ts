@@ -92,3 +92,153 @@ export interface LotteryTicket {
   matches?: number;
   payout_won?: number;
 }
+
+export type AdminRole = 'SUPER_ADMIN' | 'LOTTERY_MANAGER' | 'FINANCE_OFFICER' | 'SUPPORT';
+
+export interface AdminUser {
+  admin_id: string;
+  username: string;
+  email: string;
+  role: AdminRole;
+  is_mfa_enabled: boolean;
+}
+
+export interface AdminAuditLog {
+  log_id: string;
+  admin_id: string;
+  admin_username: string;
+  action: string;
+  target_resource: string;
+  payload: any;
+  ip_address: string;
+  timestamp: string;
+}
+
+export interface WithdrawalRequest {
+  request_id: string;
+  telegram_id: number;
+  username: string;
+  amount: number;
+  currency: 'TON' | 'STARS' | 'COINS';
+  destination_wallet: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PROCESSED';
+  processed_by?: string;
+  created_at: string;
+  processed_at?: string;
+  notes?: string;
+}
+
+export interface AdminDashboardMetrics {
+  financials: {
+    ggr: number;
+    total_turnover: number;
+    total_payouts_paid: number;
+    profit_margin_pct: number;
+  };
+  users: {
+    total_registered: number;
+    dau_estimate: number;
+    mau_estimate: number;
+    banned_users: number;
+  };
+  spinner_analytics: {
+    total_spins: number;
+    theoretical_rtp: string;
+    actual_rtp: string;
+    house_margin: string;
+  };
+  lottery_analytics: {
+    open_draws: number;
+    active_draw_pool: number;
+    total_tickets_sold: number;
+  };
+  financial_queue: {
+    pending_withdrawals: number;
+  };
+}
+
+export interface AdminUserRecord {
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  balance_coins: number;
+  balance_stars: number;
+  free_tickets: number;
+  nonce: number;
+  is_banned: boolean;
+  total_spent: number;
+  total_won: number;
+  net_profit: number;
+  tickets_count: number;
+  spins_count: number;
+  created_at: string;
+}
+
+export interface RtpSimulationResult {
+  iterations: number;
+  cost_per_spin: number;
+  total_wagered: number;
+  total_payout_distributed: number;
+  theoretical_rtp: string;
+  theoretical_rtp_numeric: number;
+  simulated_rtp: string;
+  simulated_rtp_numeric: number;
+  house_edge: string;
+  house_edge_numeric: number;
+  is_house_profitable: boolean;
+  sector_breakdown: Array<{
+    sector_id: number;
+    label: string;
+    weight: number;
+    prize_type: string;
+    prize_value: number;
+    theoretical_win_rate: number;
+    empirical_win_rate: number;
+    total_hits: number;
+  }>;
+}
+
+export interface ReferralFriend {
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  joined_at: string;
+  total_commission_generated: number;
+  status: 'ACTIVE' | 'PENDING';
+}
+
+export interface ReferralRewardLog {
+  reward_id: string;
+  referee_id: number;
+  referee_name: string;
+  reward_type: 'SIGNUP_BONUS' | 'DEPOSIT_COMMISSION' | 'PRIZE_COMMISSION';
+  source_event: string;
+  original_amount: number;
+  commission_rate: number;
+  reward_coins: number;
+  description: string;
+  created_at: string;
+}
+
+export interface ReferralStats {
+  referral_code: string;
+  invite_link: string;
+  telegram_share_url: string;
+  signup_bonus_coins: number;
+  deposit_commission_rate: number;
+  prize_commission_rate: number;
+  total_friends_referred: number;
+  total_commission_earned: number;
+  breakdown: {
+    signup_bonuses: number;
+    deposit_commissions: number;
+    prize_commissions: number;
+  };
+  referred_by: {
+    telegram_id: number;
+    username: string;
+    first_name: string;
+  } | null;
+  friends: ReferralFriend[];
+  recent_rewards: ReferralRewardLog[];
+}

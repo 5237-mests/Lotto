@@ -2,6 +2,18 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
+import { verifyTelegramWebAppData, validateTelegramInitData } from './server/auth';
+import { runMigrations } from './server/migrations';
+import { calculateSpinResult, hashServerSeed, DEFAULT_SECTORS } from './ProvablyFairEngine.js';
+import { executeSpinnerTransaction } from './server/spinnerService';
+import { createAdminRouter } from './server/adminService';
+import {
+  createReferralRouter,
+  processDepositCommission,
+  processPrizeCommission,
+  registerReferral,
+  SIGNUP_BONUS_COINS
+} from './server/referralService';
 
 const app = express();
 const PORT = 3000;
@@ -12,7 +24,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-telegram-user-id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-telegram-user-id, x-admin-role, x-referral-code');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
@@ -30,6 +42,8 @@ interface User {
   nonce: number;
   current_server_seed: string;
   created_at: string;
+  referred_by?: number | null;
+  is_banned?: boolean;
 }
 
 interface SpinnerSector {
@@ -146,39 +160,20 @@ function initializeLotteryDraws() {
 }
 initializeLotteryDraws();
 
-// Verification helper for Telegram WebApp initData
-function verifyTelegramWebAppData(telegramInitData: string, botToken: string): boolean {
-  if (!botToken) return true; // If no bot token configured, permissive for development/demo
-  try {
-    const urlParams = new URLSearchParams(telegramInitData);
-    const hash = urlParams.get('hash');
-    if (!hash) return false;
-    urlParams.delete('hash');
-
-    const dataCheckString = Array.from(urlParams.entries())
-      .map(([key, value]) => `${key}=${value}`)
-      .sort()
-      .join('\n');
-
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
-    const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-
-    return calculatedHash === hash;
-  } catch (err) {
-    return false;
-  }
-}
-
 // Parse Telegram InitData or generate demo user
 function resolveTelegramUser(req: Request): User {
-  const authHeader = req.headers['authorization']?.replace('Bearer ', '') || '';
+  const authHeader = req.headers['authorization']?.replace('Bearer ', '').replace('tma ', '') || '';
   const customId = req.headers['x-telegram-user-id'];
 
   let telegramId = 7770001;
   let username = 'lotto_player';
   let firstName = 'Player One';
 
-  if (customId && !isNaN(Number(customId))) {
+  if (req.telegramUser) {
+    telegramId = req.telegramUser.id;
+    if (req.telegramUser.username) username = req.telegramUser.username;
+    if (req.telegramUser.first_name) firstName = req.telegramUser.first_name;
+  } else if (customId && !isNaN(Number(customId))) {
     telegramId = Number(customId);
     username = `player_${telegramId}`;
     firstName = `Player #${telegramId.toString().slice(-4)}`;
@@ -198,6 +193,26 @@ function resolveTelegramUser(req: Request): User {
   }
 
   let user = users.get(telegramId);
+
+  // Check for referral code in query, headers, body, or start_param
+  let refParam = (req.query?.ref as string) || (req.headers['x-referral-code'] as string) || (req.body?.referrer_id as string) || (req.body?.start_param as string) || '';
+  if (!refParam && authHeader && authHeader.includes('start_param=')) {
+    try {
+      const params = new URLSearchParams(authHeader);
+      refParam = params.get('start_param') || '';
+    } catch {
+      // ignore
+    }
+  }
+  let potentialReferrerId: number | null = null;
+  if (refParam) {
+    const cleaned = refParam.toString().replace(/^ref_/, '');
+    const num = Number(cleaned);
+    if (!isNaN(num) && num > 0 && num !== telegramId) {
+      potentialReferrerId = num;
+    }
+  }
+
   if (!user) {
     const serverSeed = crypto.randomBytes(32).toString('hex');
     user = {
@@ -209,9 +224,16 @@ function resolveTelegramUser(req: Request): User {
       free_tickets: 3,
       nonce: 0,
       current_server_seed: serverSeed,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      referred_by: potentialReferrerId || null
     };
     users.set(telegramId, user);
+
+    if (potentialReferrerId) {
+      registerReferral(potentialReferrerId, telegramId, users).catch(() => {});
+    }
+  } else if (!user.referred_by && potentialReferrerId) {
+    registerReferral(potentialReferrerId, telegramId, users).catch(() => {});
   }
 
   return user;
@@ -234,15 +256,30 @@ function selectWeightedSector(sectors: SpinnerSector[], hashHex: string): Spinne
 
 // --- API ROUTES ---
 
+// 0. Admin API Gateway (/api/v1/admin/*)
+app.use('/api/v1/admin', createAdminRouter({
+  users,
+  lotteryDraws,
+  lotteryTickets,
+  SPINNER_SECTORS,
+  spinLogs
+}));
+
+// 0b. Referral & Affiliate API Gateway (/api/v1/referral/*)
+app.use('/api/v1/referral', createReferralRouter(users));
+
 // 1. Telegram Auth / Profile
 app.post('/api/v1/auth/telegram', (req: Request, res: Response) => {
-  const initData = req.headers['authorization']?.replace('Bearer ', '') || '';
+  const initData = req.headers['authorization']?.replace('Bearer ', '').replace('tma ', '') || (req.body?.initData as string) || '';
   const botToken = process.env.BOT_TOKEN;
 
   if (botToken && initData) {
-    const isValid = verifyTelegramWebAppData(initData, botToken);
-    if (!isValid) {
-      return res.status(401).json({ success: false, error: 'Unauthorized payload signature' });
+    const result = validateTelegramInitData(initData, botToken);
+    if (!result.valid) {
+      return res.status(401).json({ success: false, error: `Unauthorized: ${result.error || 'Invalid signature'}` });
+    }
+    if (result.data?.user) {
+      req.telegramUser = result.data.user;
     }
   }
 
@@ -263,17 +300,21 @@ app.post('/api/v1/auth/telegram', (req: Request, res: Response) => {
       provably_fair: {
         current_server_seed_hash: nextSeedHash,
         nonce: user.nonce
-      }
+      },
+      referred_by: user.referred_by || null
     }
   });
 });
 
 // 2. Faucet (Demo Coins / Stars Top Up)
-app.post('/api/v1/faucet', (req: Request, res: Response) => {
+app.post('/api/v1/faucet', async (req: Request, res: Response) => {
   const user = resolveTelegramUser(req);
   user.balance_coins += 100;
   user.balance_stars += 10;
   user.free_tickets += 2;
+
+  // 10% deposit commission on faucet top-ups for referrer
+  await processDepositCommission(user.telegram_id, 100, users);
 
   res.json({
     success: true,
@@ -283,6 +324,39 @@ app.post('/api/v1/faucet', (req: Request, res: Response) => {
       stars: user.balance_stars,
       free_tickets: user.free_tickets
     }
+  });
+});
+
+// 2b. Deposit Coins (with 10% Referral Commission)
+app.post('/api/v1/deposit', async (req: Request, res: Response) => {
+  const user = resolveTelegramUser(req);
+  if ((user as any).is_banned) {
+    return res.status(403).json({ success: false, error: 'Account suspended.' });
+  }
+
+  const amount = Number(req.body.amount) || 100;
+  if (isNaN(amount) || amount <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid deposit amount' });
+  }
+
+  user.balance_coins += amount;
+
+  // Process 10% commission to referrer
+  const commissionReward = await processDepositCommission(user.telegram_id, amount, users);
+
+  res.json({
+    success: true,
+    message: `Successfully deposited ${amount} Coins!`,
+    deposit_amount: amount,
+    balances: {
+      coins: user.balance_coins,
+      stars: user.balance_stars,
+      free_tickets: user.free_tickets
+    },
+    referral_commission: commissionReward ? {
+      referrer_id: commissionReward.referrer_id,
+      commission_coins: commissionReward.reward_coins
+    } : null
   });
 });
 
@@ -302,97 +376,44 @@ app.get('/api/v1/spinner/config', (req: Request, res: Response) => {
   });
 });
 
-// 4. Provably Fair Spin
-app.post('/api/v1/spinner/spin', (req: Request, res: Response) => {
-  const user = resolveTelegramUser(req);
-  const { client_seed, use_free_ticket } = req.body;
-
-  const effectiveClientSeed = (client_seed && typeof client_seed === 'string' && client_seed.trim())
-    ? client_seed.trim()
-    : `client_seed_${user.telegram_id}_${Date.now()}`;
-
-  const SPIN_COST = 10;
-  let paidWith = 'COINS';
-
-  if (use_free_ticket && user.free_tickets > 0) {
-    user.free_tickets -= 1;
-    paidWith = 'FREE_TICKET';
-  } else {
-    if (user.balance_coins < SPIN_COST) {
-      return res.status(400).json({
-        success: false,
-        error: 'Insufficient Coins! Use the faucet or win tickets in the scheduled draw.'
-      });
+// 4. Provably Fair Spin (HMAC-SHA256 RNG Engine)
+app.post('/api/v1/spinner/spin', async (req: Request, res: Response) => {
+  try {
+    const user = resolveTelegramUser(req);
+    if ((user as any).is_banned) {
+      return res.status(403).json({ success: false, error: 'Account suspended by administrator. Please contact support.' });
     }
-    user.balance_coins -= SPIN_COST;
-  }
+    const { client_seed, use_free_ticket } = req.body;
 
-  const currentServerSeed = user.current_server_seed;
-  const userNonce = user.nonce;
-  const serverSeedHash = crypto.createHash('sha256').update(currentServerSeed).digest('hex');
-
-  // Outcome Calculation: HMAC-SHA256(serverSeed, clientSeed + ":" + nonce)
-  const hmac = crypto.createHmac('sha256', currentServerSeed);
-  hmac.update(`${effectiveClientSeed}:${userNonce}`);
-  const outcomeHash = hmac.digest('hex');
-
-  const winningSector = selectWeightedSector(SPINNER_SECTORS, outcomeHash);
-
-  // Apply Prize
-  if (winningSector.prize_type === 'COINS') {
-    user.balance_coins += winningSector.prize_value;
-  } else if (winningSector.prize_type === 'STARS') {
-    user.balance_stars += winningSector.prize_value;
-  } else if (winningSector.prize_type === 'FREE_TICKET') {
-    user.free_tickets += winningSector.prize_value;
-  }
-
-  // Increment user nonce and generate new fresh server seed for next spin
-  user.nonce += 1;
-  const nextServerSeed = crypto.randomBytes(32).toString('hex');
-  user.current_server_seed = nextServerSeed;
-  const nextServerSeedHash = crypto.createHash('sha256').update(nextServerSeed).digest('hex');
-
-  const spinLog: SpinLog = {
-    spin_id: crypto.randomUUID(),
-    telegram_id: user.telegram_id,
-    sector_id: winningSector.id,
-    sector_label: winningSector.label,
-    prize_type: winningSector.prize_type,
-    prize_value: winningSector.prize_value,
-    server_seed: currentServerSeed,
-    server_seed_hash: serverSeedHash,
-    client_seed: effectiveClientSeed,
-    nonce: userNonce,
-    outcome_hash: outcomeHash,
-    spin_time: new Date().toISOString(),
-  };
-  spinLogs.unshift(spinLog);
-
-  res.json({
-    success: true,
-    data: {
-      winning_index: winningSector.id,
-      sector: winningSector,
-      animation: {
-        duration_ms: 4200,
-        total_rotations: 8
+    const result = await executeSpinnerTransaction(
+      {
+        telegramId: user.telegram_id,
+        username: user.username,
+        firstName: user.first_name,
+        clientSeed: client_seed,
+        useFreeTicket: Boolean(use_free_ticket),
+        sectors: SPINNER_SECTORS
       },
-      provably_fair: {
-        revealed_server_seed: currentServerSeed,
-        server_seed_hash: serverSeedHash,
-        client_seed: effectiveClientSeed,
-        nonce: userNonce,
-        outcome_hash: outcomeHash,
-        next_server_seed_hash: nextServerSeedHash
-      },
-      balances: {
-        coins: user.balance_coins,
-        stars: user.balance_stars,
-        free_tickets: user.free_tickets
-      }
+      user,
+      spinLogs
+    );
+
+    // Process 10% prize commission for referrer on coin wins
+    if (result.sector.prize_type === 'COINS' && result.sector.prize_value > 0) {
+      await processPrizeCommission(user.telegram_id, result.sector.prize_value, `SPINNER_${result.sector.label}`, users);
     }
-  });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (err: any) {
+    const status = err.status || 500;
+    res.status(status).json({
+      success: false,
+      error: err.message || 'Internal error during spin processing'
+    });
+  }
 });
 
 // 5. Provably Fair Verification Endpoint
@@ -403,22 +424,25 @@ app.post('/api/v1/spinner/verify', (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Missing verification parameters' });
   }
 
-  const serverSeedHash = crypto.createHash('sha256').update(server_seed).digest('hex');
-  const hmac = crypto.createHmac('sha256', server_seed);
-  hmac.update(`${client_seed}:${nonce}`);
-  const outcomeHash = hmac.digest('hex');
+  try {
+    const result = calculateSpinResult(server_seed, client_seed, nonce, SPINNER_SECTORS);
 
-  const sector = selectWeightedSector(SPINNER_SECTORS, outcomeHash);
-
-  res.json({
-    success: true,
-    data: {
-      server_seed_hash: serverSeedHash,
-      outcome_hash: outcomeHash,
-      winning_index: sector.id,
-      sector: sector
-    }
-  });
+    res.json({
+      success: true,
+      data: {
+        server_seed_hash: result.serverSeedHash,
+        outcome_hash: result.outcomeHash,
+        winning_index: result.winningIndex,
+        winningIndex: result.winningIndex,
+        sector: result.sector
+      }
+    });
+  } catch (err: any) {
+    res.status(400).json({
+      success: false,
+      error: err.message || 'Invalid verification payload'
+    });
+  }
 });
 
 // 6. Spinner History
@@ -446,6 +470,9 @@ app.get('/api/v1/lottery/draws', (req: Request, res: Response) => {
 // 8. Buy Lottery Ticket
 app.post('/api/v1/lottery/buy-ticket', (req: Request, res: Response) => {
   const user = resolveTelegramUser(req);
+  if ((user as any).is_banned) {
+    return res.status(403).json({ success: false, error: 'Account suspended by administrator. Please contact support.' });
+  }
   const { draw_id, selected_numbers, use_free_ticket } = req.body;
 
   const draw = lotteryDraws.get(draw_id);
@@ -598,6 +625,8 @@ app.post('/api/v1/lottery/trigger-draw', (req: Request, res: Response) => {
       if (ticketUser) {
         if (draw.currency === 'COINS') {
           ticketUser.balance_coins += reward;
+          // 10% referral prize commission
+          processPrizeCommission(ticketUser.telegram_id, reward, `LOTTERY_${draw.title}`, users).catch(() => {});
         } else {
           ticketUser.balance_stars += reward;
         }
@@ -640,6 +669,18 @@ app.post('/api/v1/lottery/trigger-draw', (req: Request, res: Response) => {
     }
   });
 });
+
+// 11. Admin API Router (RBAC, Draw Lifecycle, Spinner Engine, User Ledgers, Anti-Fraud, Financial Queue)
+app.use(
+  '/api/v1/admin',
+  createAdminRouter({
+    users,
+    lotteryDraws,
+    lotteryTickets,
+    SPINNER_SECTORS,
+    spinLogs
+  })
+);
 
 // API 404 handler - prevents /api requests from falling through to HTML index
 app.all('/api/*', (req: Request, res: Response) => {
