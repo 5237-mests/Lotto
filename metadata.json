@@ -1,0 +1,8 @@
+{
+  "name": "Lotto Telegram Mini App",
+  "description": "Telegram Mini App lottery platform featuring provably fair instant spinner wheels and scheduled lottery draws.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
