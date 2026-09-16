@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PlusCircle, Sparkles, User, RefreshCw, Send, ShieldCheck } from 'lucide-react';
 import { UserProfile, UserBalances } from '../types';
+import { apiFetch } from '../utils/api';
 
 interface HeaderNavProps {
   user: UserProfile | null;
@@ -24,20 +25,19 @@ export function HeaderNav({
     setIsFauceting(true);
     setFaucetMsg('');
     try {
-      const res = await fetch('/api/v1/faucet', {
+      const data = await apiFetch('/api/v1/faucet', {
         method: 'POST',
         headers: {
           'x-telegram-user-id': telegramUserId.toString(),
         },
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data.success && data.balances) {
         onBalanceUpdate(data.balances);
         setFaucetMsg('+100 Coins & 2 Tickets!');
         setTimeout(() => setFaucetMsg(''), 3000);
       }
     } catch (err) {
-      console.error(err);
+      console.warn('Faucet request failed:', err);
     } finally {
       setIsFauceting(false);
     }

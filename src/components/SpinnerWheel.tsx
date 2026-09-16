@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { Sparkles, ShieldCheck, KeyRound, Dices, RefreshCw, Gift, Trophy } from 'lucide-react';
 import { SpinnerSector, SpinnerConfig, SpinResult, UserBalances } from '../types';
+import { apiFetch } from '../utils/api';
 
 interface SpinnerWheelProps {
   balances: UserBalances;
@@ -39,19 +40,18 @@ export function SpinnerWheel({
   // Fetch spinner config on mount
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/spinner/config', {
+      const data = await apiFetch<SpinnerConfig>('/api/v1/spinner/config', {
         headers: {
           'x-telegram-user-id': telegramUserId.toString(),
         }
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data.success && data.data) {
         setSectors(data.data.sectors);
         setServerSeedHash(data.data.server_seed_hash);
         setUserNonce(data.data.user_nonce);
       }
     } catch (err) {
-      console.error('Error fetching spinner config:', err);
+      console.warn('Spinner config load warning:', err);
     }
   }, [telegramUserId]);
 
@@ -186,7 +186,7 @@ export function SpinnerWheel({
     triggerHaptic('impact');
 
     try {
-      const res = await fetch('/api/v1/spinner/spin', {
+      const json = await apiFetch<SpinResult>('/api/v1/spinner/spin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,8 +198,7 @@ export function SpinnerWheel({
         })
       });
 
-      const json = await res.json();
-      if (!json.success) {
+      if (!json.success || !json.data) {
         throw new Error(json.error || 'Spin failed');
       }
 

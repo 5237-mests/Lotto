@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { Sparkles, Clock, Ticket, Zap, Award, CheckCircle2, Shuffle, AlertCircle, Play } from 'lucide-react';
 import { LotteryDraw, UserBalances } from '../types';
+import { apiFetch } from '../utils/api';
 
 interface ScheduledLotteryProps {
   balances: UserBalances;
@@ -32,9 +33,8 @@ export function ScheduledLottery({
 
   const fetchDraws = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/lottery/draws');
-      const data = await res.json();
-      if (data.success) {
+      const data = await apiFetch<LotteryDraw[]>('/api/v1/lottery/draws');
+      if (data.success && Array.isArray(data.data)) {
         setDraws(data.data);
         if (!selectedDraw && data.data.length > 0) {
           setSelectedDraw(data.data[0]);
@@ -44,7 +44,7 @@ export function ScheduledLottery({
         }
       }
     } catch (err) {
-      console.error('Failed to fetch draws:', err);
+      console.warn('Could not sync draws:', err);
     }
   }, [selectedDraw]);
 
@@ -109,7 +109,7 @@ export function ScheduledLottery({
     setAlertInfo(null);
 
     try {
-      const res = await fetch('/api/v1/lottery/buy-ticket', {
+      const json = await apiFetch('/api/v1/lottery/buy-ticket', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,10 +122,11 @@ export function ScheduledLottery({
         })
       });
 
-      const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Purchase failed');
 
-      onBalanceUpdate(json.data.balances);
+      if (json.data?.balances) {
+        onBalanceUpdate(json.data.balances);
+      }
       setAlertInfo({
         type: 'success',
         message: `Ticket purchased! Numbers: [${selectedNumbers.join(', ')}]. Good luck!`
@@ -147,7 +148,7 @@ export function ScheduledLottery({
     setAlertInfo(null);
 
     try {
-      const res = await fetch('/api/v1/lottery/trigger-draw', {
+      const json = await apiFetch('/api/v1/lottery/trigger-draw', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,8 +157,7 @@ export function ScheduledLottery({
         body: JSON.stringify({ draw_id: drawId })
       });
 
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Draw execution failed');
+      if (!json.success || !json.data) throw new Error(json.error || 'Draw execution failed');
 
       setRecentResolution({
         draw_title: json.data.title,
@@ -167,12 +167,11 @@ export function ScheduledLottery({
       });
 
       // Refresh balances and draws
-      const authRes = await fetch('/api/v1/auth/telegram', {
+      const authJson = await apiFetch('/api/v1/auth/telegram', {
         method: 'POST',
         headers: { 'x-telegram-user-id': telegramUserId.toString() }
       });
-      const authJson = await authRes.json();
-      if (authJson.success) {
+      if (authJson.success && authJson.data?.balances) {
         onBalanceUpdate(authJson.data.balances);
       }
 

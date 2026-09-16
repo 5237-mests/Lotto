@@ -8,6 +8,17 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// CORS & Preflight handling
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-telegram-user-id');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 // In-Memory Database Store
 interface User {
   telegram_id: number;
@@ -628,6 +639,26 @@ app.post('/api/v1/lottery/trigger-draw', (req: Request, res: Response) => {
       next_draw_id: nextDrawId
     }
   });
+});
+
+// API 404 handler - prevents /api requests from falling through to HTML index
+app.all('/api/*', (req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    error: `API route not found: ${req.method} ${req.path}`
+  });
+});
+
+// Global API error middleware
+app.use((err: Error, req: Request, res: Response, next: (err?: unknown) => void) => {
+  if (req.path.startsWith('/api')) {
+    console.error('API Error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Internal Server Error'
+    });
+  }
+  next(err);
 });
 
 // START SERVER WITH VITE INTEGRATION

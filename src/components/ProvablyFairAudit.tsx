@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, CheckCircle2, XCircle, ArrowRight, RefreshCw, Key, Hash, Dices, Lock } from 'lucide-react';
 import { SpinAuditLog, SpinnerSector } from '../types';
+import { apiFetch } from '../utils/api';
 
 interface ProvablyFairAuditProps {
   initialServerSeed?: string;
@@ -40,17 +41,16 @@ export function ProvablyFairAudit({
   // Fetch recent spin history
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/spinner/history', {
+      const data = await apiFetch<SpinAuditLog[]>('/api/v1/spinner/history', {
         headers: {
           'x-telegram-user-id': telegramUserId.toString(),
         },
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         setHistory(data.data);
       }
     } catch (err) {
-      console.error('Failed to fetch history:', err);
+      console.warn('History fetch warning:', err);
     }
   }, [telegramUserId]);
 
@@ -69,7 +69,7 @@ export function ProvablyFairAudit({
     setResult(null);
 
     try {
-      const res = await fetch('/api/v1/spinner/verify', {
+      const json = await apiFetch<VerificationResult>('/api/v1/spinner/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -79,8 +79,7 @@ export function ProvablyFairAudit({
         }),
       });
 
-      const json = await res.json();
-      if (!json.success) {
+      if (!json.success || !json.data) {
         throw new Error(json.error || 'Verification failed');
       }
       setResult(json.data);

@@ -6,6 +6,7 @@ import { ScheduledLottery } from './components/ScheduledLottery';
 import { ProvablyFairAudit } from './components/ProvablyFairAudit';
 import { UserTicketsModal } from './components/UserTicketsModal';
 import { UserProfile, UserBalances } from './types';
+import { apiFetch } from './utils/api';
 
 type ActiveTab = 'SPINNER' | 'LOTTERY' | 'AUDIT';
 
@@ -43,7 +44,7 @@ export default function App() {
 
       const initData = tg?.initData || '';
 
-      const res = await fetch('/api/v1/auth/telegram', {
+      const json = await apiFetch<UserProfile>('/api/v1/auth/telegram', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -52,13 +53,14 @@ export default function App() {
         },
       });
 
-      const json = await res.json();
-      if (json.success) {
+      if (json.success && json.data) {
         setUser(json.data);
-        setBalances(json.data.balances);
+        if (json.data.balances) {
+          setBalances(json.data.balances);
+        }
       }
     } catch (err) {
-      console.error('Failed to authenticate with backend:', err);
+      console.warn('Authentication status:', err);
     }
   }, []);
 

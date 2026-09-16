@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Ticket, Trophy, RefreshCw, CheckCircle2, Clock, Sparkles, X } from 'lucide-react';
 import { LotteryTicket } from '../types';
+import { apiFetch } from '../utils/api';
 
 interface UserTicketsModalProps {
   isOpen: boolean;
@@ -20,17 +21,16 @@ export function UserTicketsModal({
   const fetchTickets = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/v1/lottery/my-tickets', {
+      const data = await apiFetch<LotteryTicket[]>('/api/v1/lottery/my-tickets', {
         headers: {
           'x-telegram-user-id': telegramUserId.toString(),
         },
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         setTickets(data.data);
       }
     } catch (err) {
-      console.error('Failed to fetch tickets:', err);
+      console.warn('Could not fetch tickets:', err);
     } finally {
       setIsLoading(false);
     }
