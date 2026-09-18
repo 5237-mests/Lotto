@@ -2,7 +2,7 @@
 
 > **System Management, Financial Operations, and Compliance Specification**  
 > **Target Audience:** Backend/Frontend Developers & AI Studio Implementation  
-> **Platform Stack:** React / Next.js Admin Panel + Node.js Admin API Gateway + PostgreSQL  
+> **Platform Stack:** React / Next.js Admin Panel + Node.js Admin API Gateway + MySQL  
 
 ---
 
@@ -30,7 +30,7 @@ The Admin Dashboard is a standalone web interface built for platform operators. 
 +-----------------------------------++----------------------------------+
                                     ||
                           +---------vv---------+
-                          | PostgreSQL Database|
+                          | MySQL Database|
                           +--------------------+
 ```
 
@@ -92,38 +92,38 @@ Provides support teams with complete visibility into player activities and walle
 ```sql
 -- Admin Users Table
 CREATE TABLE admin_users (
-    admin_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) CHECK (role IN ('SUPER_ADMIN', 'LOTTERY_MANAGER', 'FINANCE_OFFICER', 'SUPPORT')) NOT NULL,
     mfa_secret VARCHAR(64),
     is_mfa_enabled BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Admin Audit Log Table
 CREATE TABLE admin_audit_logs (
-    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    admin_id UUID REFERENCES admin_users(admin_id),
+    log_id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    admin_id CHAR(36) REFERENCES admin_users(admin_id),
     action VARCHAR(100) NOT NULL, -- e.g., "UPDATE_SPINNER_WEIGHTS", "MANUAL_BALANCE_CREDIT"
     target_resource VARCHAR(50) NOT NULL, -- e.g., "users:123456789"
-    payload JSONB,
+    payload JSON,
     ip_address VARCHAR(45),
-    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Withdrawal Requests / Financial Approval Queue
 CREATE TABLE withdrawal_requests (
-    request_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     telegram_id BIGINT REFERENCES users(telegram_id),
-    amount NUMERIC(18, 4) NOT NULL,
+    amount DECIMAL(18, 4) NOT NULL,
     currency VARCHAR(10) CHECK (currency IN ('TON', 'STARS')),
     destination_wallet VARCHAR(128) NOT NULL,
     status VARCHAR(20) CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'PROCESSED')) DEFAULT 'PENDING',
-    processed_by UUID REFERENCES admin_users(admin_id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    processed_at TIMESTAMP WITH TIME ZONE
+    processed_by CHAR(36) REFERENCES admin_users(admin_id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    processed_at DATETIME
 );
 ```
 
@@ -196,8 +196,8 @@ All specifications defined in this document have been implemented across the bac
 | **Admin UI Component** | `/src/components/AdminDashboard.tsx` | Full single-page management console with 6 tabs, RBAC role switcher, and live charts. |
 | **API Gateway Router** | `/server/adminService.ts` | Express router handling `/api/v1/admin/*`, RBAC authentication, and Monte Carlo engine. |
 | **Server Mounting** | `/server.ts` | Integrated at `/api/v1/admin` with CORS headers (`x-admin-role`, `Authorization`). |
-| **PostgreSQL Schema** | `/server/migrations.ts` | Tables: `admin_users`, `admin_audit_logs`, `withdrawal_requests`, plus `users.is_banned`. |
-| **Migration Scripts** | `package.json` (`npm run migrate`, `npm run migration`) | Executes schema migrations and seeds default admin accounts via node-postgres. |
+| **MySQL Schema** | `/server/migrations.ts` | Tables: `admin_users`, `admin_audit_logs`, `withdrawal_requests`, plus `users.is_banned`. |
+| **Migration Scripts** | `package.json` (`npm run migrate`, `npm run migration`) | Executes schema migrations and seeds default admin accounts via mysql2. |
 | **Shared Type Contracts** | `/src/types.ts` | TypeScript definitions for `AdminRole`, `AdminUser`, `AdminAuditLog`, `WithdrawalRequest`, etc. |
 
 ### 6.2 Pre-Seeded Admin Test Accounts

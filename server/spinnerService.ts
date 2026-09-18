@@ -1,6 +1,5 @@
 import crypto from 'crypto';
-import pg from 'pg';
-import { getDbPool } from './db';
+import { getDbPool, getDbConnection, DbConnection } from './db';
 import { calculateSpinResult, generateServerSeed, hashServerSeed, DEFAULT_SECTORS } from '../ProvablyFairEngine.js';
 import { SpinnerSector } from '../src/types';
 
@@ -40,15 +39,15 @@ export interface SpinTransactionOutput {
 
 /**
  * Executes a Provably Fair Spinner transaction.
- * 1. Begins PostgreSQL database transaction (BEGIN ... COMMIT).
- * 2. Queries & locks user record in PostgreSQL (FOR UPDATE) to verify token/coin balances.
+ * 1. Begins MySQL database transaction (BEGIN ... COMMIT).
+ * 2. Queries & locks user record in MySQL (FOR UPDATE) to verify token/coin balances.
  * 3. Deducts spin cost within the transaction.
  * 4. Calculates weighted winning index using calculateSpinResult from ProvablyFairEngine.
  * 5. Applies prize winnings, updates balances, sets next server seed, increments nonce.
  * 6. Logs the audit record into spinner_logs.
  * 7. Commits transaction and returns result to client.
  *
- * (Includes graceful in-memory fallback if PostgreSQL connection is unavailable in sandbox).
+ * (Includes graceful in-memory fallback if MySQL connection is unavailable in sandbox).
  */
 export async function executeSpinnerTransaction(
   input: SpinTransactionInput,
@@ -61,29 +60,28 @@ export async function executeSpinnerTransaction(
     ? clientSeed.trim()
     : `client_seed_${telegramId}_${Date.now()}`;
 
-  let pool: pg.Pool | null = null;
-  let client: pg.PoolClient | null = null;
+  let client: DbConnection | null = null;
 
   try {
-    pool = getDbPool();
+    getDbPool();
     // Use a quick timeout when acquiring client so offline external DB doesn't stall the request
     client = await Promise.race([
-      pool.connect(),
+      getDbConnection(),
       new Promise<null>((_, reject) => setTimeout(() => reject(new Error('DB connection timeout')), 1200))
-    ]) as pg.PoolClient;
+    ]) as DbConnection;
   } catch (dbErr) {
-    // If PostgreSQL is unreachable, client remains null and we proceed with in-memory transaction
-    console.warn(`[Spinner PG] Notice: PostgreSQL offline (${(dbErr as Error).message}), executing in-memory store transaction.`);
+    // If MySQL is unreachable, client remains null and we proceed with in-memory transaction
+    console.warn(`[Spinner MySQL] Notice: MySQL offline (${(dbErr as Error).message}), executing in-memory store transaction.`);
   }
 
   if (client) {
     try {
       // 1. Begin Database Transaction
-      await client.query('BEGIN');
+      await client.query('START TRANSACTION');
 
       // 2. Ensure user exists and lock the user row FOR UPDATE
       let userQuery = await client.query(
-        'SELECT telegram_id, coins_balance, stars_balance, free_tickets_balance, current_server_seed, current_server_seed_hash, nonce FROM users WHERE telegram_id = $1 FOR UPDATE',
+        'SELECT telegram_id, coins_balance, stars_balance, free_tickets_balance, current_server_seed, current_server_seed_hash, nonce FROM users WHERE telegram_id = ? FOR UPDATE',
         [telegramId]
       );
 
@@ -94,13 +92,13 @@ export async function executeSpinnerTransaction(
           `INSERT INTO users (
             telegram_id, username, first_name, coins_balance, stars_balance, free_tickets_balance,
             current_server_seed, current_server_seed_hash, nonce, created_at, updated_at
-          ) VALUES ($1, $2, $3, 200.00, 20.00, 3, $4, $5, 0, NOW(), NOW())
-          ON CONFLICT (telegram_id) DO NOTHING`,
+          ) VALUES (?, ?, ?, 200.00, 20.00, 3, ?, ?, 0, NOW(), NOW())
+          ON DUPLICATE KEY UPDATE telegram_id = telegram_id`,
           [telegramId, username || `player_${telegramId}`, firstName || 'Player', initialServerSeed, initialSeedHash]
         );
 
         userQuery = await client.query(
-          'SELECT telegram_id, coins_balance, stars_balance, free_tickets_balance, current_server_seed, current_server_seed_hash, nonce FROM users WHERE telegram_id = $1 FOR UPDATE',
+          'SELECT telegram_id, coins_balance, stars_balance, free_tickets_balance, current_server_seed, current_server_seed_hash, nonce FROM users WHERE telegram_id = ? FOR UPDATE',
           [telegramId]
         );
       }
@@ -152,14 +150,14 @@ export async function executeSpinnerTransaction(
       // 5. Update user state in database
       await client.query(
         `UPDATE users
-         SET coins_balance = $1,
-             stars_balance = $2,
-             free_tickets_balance = $3,
+         SET coins_balance = ?,
+             stars_balance = ?,
+             free_tickets_balance = ?,
              nonce = nonce + 1,
-             current_server_seed = $4,
-             current_server_seed_hash = $5,
+             current_server_seed = ?,
+             current_server_seed_hash = ?,
              updated_at = NOW()
-         WHERE telegram_id = $6`,
+         WHERE telegram_id = ?`,
         [coins, stars, freeTickets, nextServerSeed, nextServerSeedHash, telegramId]
       );
 
@@ -170,7 +168,7 @@ export async function executeSpinnerTransaction(
           spin_id, user_id, server_seed, server_seed_hash, client_seed,
           nonce, outcome_hash, winning_index, prize_type, prize_value,
           cost_amount, cost_currency, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           spinId,
           telegramId,

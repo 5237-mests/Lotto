@@ -432,7 +432,7 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
             {/* System Status indicator */}
             <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>PostgreSQL & HMAC Engine Active</span>
+              <span>MySQL & HMAC Engine Active</span>
             </div>
 
             {/* RBAC Role Selector */}
@@ -634,7 +634,7 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
                   <span className="text-xs text-slate-400">/ {metrics?.users.mau_estimate ?? 5} MAU</span>
                 </div>
                 <div className="mt-2 text-[11px] text-slate-400">
-                  {metrics?.users.total_registered ?? 0} registered • {metrics?.users.banned_users ?? 0} banned
+                  {metrics?.users.total_registered ?? 0} registered â€¢ {metrics?.users.banned_users ?? 0} banned
                 </div>
                 <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-indigo-500/5 rounded-full blur-xl pointer-events-none" />
               </div>
@@ -891,10 +891,10 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
 
                     <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-[11px] text-slate-400 space-y-1">
                       <div className="font-bold text-slate-300">Multi-Tier Prize Rules:</div>
-                      <div>• Match 5/5: 70% of Jackpot Pool</div>
-                      <div>• Match 4/5: 20% of Jackpot Pool</div>
-                      <div>• Match 3/5: 8% of Jackpot Pool</div>
-                      <div>• Match 2/5: 1.5x Ticket Cost</div>
+                      <div>â€¢ Match 5/5: 70% of Jackpot Pool</div>
+                      <div>â€¢ Match 4/5: 20% of Jackpot Pool</div>
+                      <div>â€¢ Match 3/5: 8% of Jackpot Pool</div>
+                      <div>â€¢ Match 2/5: 1.5x Ticket Cost</div>
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-2">
@@ -1131,7 +1131,7 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
               <div className="p-4 border-b border-slate-800 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-300">Live Sector Table (Total Weight Sum: {totalSectorsWeight})</span>
                 <span className="text-[11px] text-slate-400">
-                  Formula: Win % = (Sector Weight / {totalSectorsWeight}) × 100
+                  Formula: Win % = (Sector Weight / {totalSectorsWeight}) Ã— 100
                 </span>
               </div>
 
@@ -1198,7 +1198,7 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
                             {prob}%
                           </td>
                           <td className="py-3 px-4 font-mono text-[11px] text-slate-400">
-                            {simHit ? `${simHit.empirical_win_rate}% (${simHit.total_hits.toLocaleString()} hits)` : '—'}
+                            {simHit ? `${simHit.empirical_win_rate}% (${simHit.total_hits.toLocaleString()} hits)` : 'â€”'}
                           </td>
                         </tr>
                       );
@@ -1257,9 +1257,9 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                       <div className="text-[11px] text-slate-400">Current Balances:</div>
                       <div className="flex items-center gap-3 font-bold text-white">
-                        <span>🪙 {selectedUserForAdjustment.balance_coins} Coins</span>
-                        <span>⭐ {selectedUserForAdjustment.balance_stars} Stars</span>
-                        <span>🎟️ {selectedUserForAdjustment.free_tickets} Tickets</span>
+                        <span>ðŸª™ {selectedUserForAdjustment.balance_coins} Coins</span>
+                        <span>â­ {selectedUserForAdjustment.balance_stars} Stars</span>
+                        <span>ðŸŽŸï¸ {selectedUserForAdjustment.free_tickets} Tickets</span>
                       </div>
                     </div>
 
@@ -1343,7 +1343,7 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
                   <thead className="bg-slate-950 text-[11px] text-slate-400 uppercase tracking-wider">
                     <tr>
                       <th className="py-3 px-4">Player ID & Username</th>
-                      <th className="py-3 px-4">Balances (🪙/⭐/🎟️)</th>
+                      <th className="py-3 px-4">Balances (ðŸª™/â­/ðŸŽŸï¸)</th>
                       <th className="py-3 px-4">Total Spent</th>
                       <th className="py-3 px-4">Total Won</th>
                       <th className="py-3 px-4">Net P/L</th>
@@ -1384,7 +1384,7 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
                               </span>
                             </td>
                             <td className="py-3 px-4 text-[11px] text-slate-400">
-                              {u.tickets_count} tickets • {u.spins_count} spins
+                              {u.tickets_count} tickets â€¢ {u.spins_count} spins
                             </td>
                             <td className="py-3 px-4">
                               <span
@@ -1492,7 +1492,7 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
                             </span>
                           </td>
                           <td className="py-3 px-4 text-[11px] text-slate-400">
-                            {w.processed_by ? `@${w.processed_by}` : '—'}
+                            {w.processed_by ? `@${w.processed_by}` : 'â€”'}
                           </td>
                           <td className="py-3 px-4 text-right">
                             {isPending ? (
@@ -1636,7 +1636,7 @@ export function AdminDashboard({ onBackToApp, onRefreshUserData }: AdminDashboar
                   )}
                   {auditInspector.result.winning_sector && (
                     <div className="text-amber-300 font-bold">
-                      Sector Result: #{auditInspector.result.winning_index} —{' '}
+                      Sector Result: #{auditInspector.result.winning_index} â€”{' '}
                       {auditInspector.result.winning_sector.label} (Prize: {auditInspector.result.winning_sector.prize_value})
                     </div>
                   )}
