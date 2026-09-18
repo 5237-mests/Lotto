@@ -144,25 +144,25 @@ export async function registerReferral(
   };
   inMemoryRewards.unshift(reward);
 
-  // Sync to PostgreSQL database if reachable
+  // Sync to MySQL database if reachable
   try {
     await query(
-      `UPDATE users SET referred_by = $1, coins_balance = coins_balance + $2, free_tickets_balance = free_tickets_balance + 1 WHERE telegram_id = $3`,
+      `UPDATE users SET referred_by = ?, coins_balance = coins_balance + ?, free_tickets_balance = free_tickets_balance + 1 WHERE telegram_id = ?`,
       [referrerId, SIGNUP_BONUS_COINS, refereeId]
     );
     await query(
-      `UPDATE users SET coins_balance = coins_balance + $1 WHERE telegram_id = $2`,
+      `UPDATE users SET coins_balance = coins_balance + ? WHERE telegram_id = ?`,
       [SIGNUP_BONUS_COINS, referrerId]
     );
     await query(
       `INSERT INTO referrals (referrer_id, referee_id, signup_bonus_coins, total_commission_coins, created_at)
-       VALUES ($1, $2, $3, 0, NOW())
-       ON CONFLICT (referee_id) DO NOTHING`,
+       VALUES (?, ?, ?, 0, NOW())
+       ON DUPLICATE KEY UPDATE referee_id = referee_id`,
       [referrerId, refereeId, SIGNUP_BONUS_COINS]
     );
     await query(
       `INSERT INTO referral_rewards (reward_id, referrer_id, referee_id, reward_type, source_event, original_amount, commission_rate, reward_coins, description, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         reward.reward_id,
         reward.referrer_id,
@@ -228,19 +228,19 @@ export async function processDepositCommission(
   };
   inMemoryRewards.unshift(reward);
 
-  // PostgreSQL sync
+  // MySQL sync
   try {
     await query(
-      `UPDATE users SET coins_balance = coins_balance + $1 WHERE telegram_id = $2`,
+      `UPDATE users SET coins_balance = coins_balance + ? WHERE telegram_id = ?`,
       [commission, referrerId]
     );
     await query(
-      `UPDATE referrals SET total_commission_coins = total_commission_coins + $1 WHERE referee_id = $2`,
+      `UPDATE referrals SET total_commission_coins = total_commission_coins + ? WHERE referee_id = ?`,
       [commission, refereeId]
     );
     await query(
       `INSERT INTO referral_rewards (reward_id, referrer_id, referee_id, reward_type, source_event, original_amount, commission_rate, reward_coins, description, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         reward.reward_id,
         reward.referrer_id,
@@ -307,19 +307,19 @@ export async function processPrizeCommission(
   };
   inMemoryRewards.unshift(reward);
 
-  // PostgreSQL sync
+  // MySQL sync
   try {
     await query(
-      `UPDATE users SET coins_balance = coins_balance + $1 WHERE telegram_id = $2`,
+      `UPDATE users SET coins_balance = coins_balance + ? WHERE telegram_id = ?`,
       [commission, referrerId]
     );
     await query(
-      `UPDATE referrals SET total_commission_coins = total_commission_coins + $1 WHERE referee_id = $2`,
+      `UPDATE referrals SET total_commission_coins = total_commission_coins + ? WHERE referee_id = ?`,
       [commission, refereeId]
     );
     await query(
       `INSERT INTO referral_rewards (reward_id, referrer_id, referee_id, reward_type, source_event, original_amount, commission_rate, reward_coins, description, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         reward.reward_id,
         reward.referrer_id,
@@ -349,7 +349,7 @@ export function getReferralStats(telegramId: number, users: Map<number, any>, re
   // Format link for Telegram Mini App startapp deep linking:
   // t.me/botusername/app?startapp=ref_12345 or t.me/botusername?startapp=ref_12345
   const inviteLink = `https://t.me/${botUsername}?startapp=ref_${telegramId}`;
-  const shareText = `🎰 Spin the Fortune Wheel & Win Real Crypto with me! Get 50 Free Bonus Coins & 1 Free Lottery Ticket when you sign up with my invite link! 🎁`;
+  const shareText = `ðŸŽ° Spin the Fortune Wheel & Win Real Crypto with me! Get 50 Free Bonus Coins & 1 Free Lottery Ticket when you sign up with my invite link! ðŸŽ`;
   const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(shareText)}`;
 
   // Find all friends referred by this user
@@ -539,7 +539,7 @@ export function createReferralRouter(users: Map<number, any>): express.Router {
 
       return res.json({
         success: true,
-        message: `🎉 Simulated Friend "${mockFirstName}" joined using your Telegram invite link! You earned +${SIGNUP_BONUS_COINS} Coins!`,
+        message: `ðŸŽ‰ Simulated Friend "${mockFirstName}" joined using your Telegram invite link! You earned +${SIGNUP_BONUS_COINS} Coins!`,
         action_type: 'JOIN',
         earned_coins: SIGNUP_BONUS_COINS,
         balances: {
@@ -588,7 +588,7 @@ export function createReferralRouter(users: Map<number, any>): express.Router {
 
       return res.json({
         success: true,
-        message: `💳 Simulated Friend "${friendName}" deposited ${depositAmount} Coins! You earned a 10% commission (+${reward?.reward_coins} Coins)!`,
+        message: `ðŸ’³ Simulated Friend "${friendName}" deposited ${depositAmount} Coins! You earned a 10% commission (+${reward?.reward_coins} Coins)!`,
         action_type: 'DEPOSIT',
         earned_coins: reward?.reward_coins || 10,
         balances: {
@@ -607,7 +607,7 @@ export function createReferralRouter(users: Map<number, any>): express.Router {
 
       return res.json({
         success: true,
-        message: `🏆 Simulated Friend "${friendName}" hit a 500 Coin Jackpot win! You earned a 10% prize commission (+${reward?.reward_coins} Coins)!`,
+        message: `ðŸ† Simulated Friend "${friendName}" hit a 500 Coin Jackpot win! You earned a 10% prize commission (+${reward?.reward_coins} Coins)!`,
         action_type: 'WIN',
         earned_coins: reward?.reward_coins || 50,
         balances: {
