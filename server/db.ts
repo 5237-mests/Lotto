@@ -1,3 +1,8 @@
+// import dotenv from 'dotenv';
+// dotenv.config();
+import { config } from 'dotenv';
+config();
+
 import mysql, { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 export interface DbQueryResult<T> {
@@ -14,7 +19,8 @@ let pool: Pool | null = null;
 
 export function getDbPool(): Pool {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL || 'mysql://lotto_user:lotto_password@localhost:3306/lotto_db';
+    const connectionString = process.env.DATABASE_URL;
+    console.log('[Database] Connecting to MySQL database... ', connectionString);
     const url = new URL(connectionString);
     pool = mysql.createPool({
       host: url.hostname,

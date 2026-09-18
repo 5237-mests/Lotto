@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at DATETIME NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 -- 2. Lottery Draws Table
 CREATE TABLE IF NOT EXISTS lottery_draws (
@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS lottery_draws (
   updated_at DATETIME NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_lottery_draws_status ON lottery_draws(status);
-CREATE INDEX idx_lottery_draws_draw_time ON lottery_draws(draw_time);
+CREATE INDEX IF NOT EXISTS idx_lottery_draws_status ON lottery_draws(status);
+CREATE INDEX IF NOT EXISTS idx_lottery_draws_draw_time ON lottery_draws(draw_time);
 
 -- 3. Lottery Tickets Table
 CREATE TABLE IF NOT EXISTS lottery_tickets (
@@ -64,8 +64,8 @@ CREATE TABLE IF NOT EXISTS lottery_tickets (
   created_at DATETIME NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_lottery_tickets_draw ON lottery_tickets(draw_id);
-CREATE INDEX idx_lottery_tickets_user ON lottery_tickets(user_id);
+CREATE INDEX IF NOT EXISTS idx_lottery_tickets_draw ON lottery_tickets(draw_id);
+CREATE INDEX IF NOT EXISTS idx_lottery_tickets_user ON lottery_tickets(user_id);
 
 -- 4. Spinner Sectors Table
 CREATE TABLE IF NOT EXISTS spinner_sectors (
@@ -96,8 +96,8 @@ CREATE TABLE IF NOT EXISTS spinner_logs (
   created_at DATETIME NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_spinner_logs_user ON spinner_logs(user_id);
-CREATE INDEX idx_spinner_logs_created_at ON spinner_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_spinner_logs_user ON spinner_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_spinner_logs_created_at ON spinner_logs(created_at DESC);
 
 -- 6. User Account Controls (Ban Status)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned TINYINT(1) DEFAULT FALSE;
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   username VARCHAR(50) UNIQUE NOT NULL,
   email VARCHAR(100) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role VARCHAR(20) CHECK (role IN ('SUPER_ADMIN', 'LOTTERY_MANAGER', 'FINANCE_OFFICER', 'SUPPORT')) NOT NULL,
+  role VARCHAR(20) NOT NULL CHECK (role IN ('SUPER_ADMIN', 'LOTTERY_MANAGER', 'FINANCE_OFFICER', 'SUPPORT')),
   mfa_secret VARCHAR(64),
   is_mfa_enabled TINYINT(1) DEFAULT FALSE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -126,24 +126,24 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_admin_audit_logs_timestamp ON admin_audit_logs(timestamp DESC);
-CREATE INDEX idx_admin_audit_logs_action ON admin_audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_timestamp ON admin_audit_logs(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_action ON admin_audit_logs(action);
 
 -- 9. Withdrawal Requests Table (Financial Approval Queue)
 CREATE TABLE IF NOT EXISTS withdrawal_requests (
   request_id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
   telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
   amount DECIMAL(18, 4) NOT NULL CHECK (amount > 0),
-  currency VARCHAR(10) CHECK (currency IN ('TON', 'STARS', 'COINS')) NOT NULL,
+  currency VARCHAR(10) NOT NULL CHECK (currency IN ('TON', 'STARS', 'COINS')),
   destination_wallet VARCHAR(128) NOT NULL,
-  status VARCHAR(20) CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'PROCESSED')) DEFAULT 'PENDING',
+  status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'PROCESSED')),
   processed_by CHAR(36) REFERENCES admin_users(admin_id) ON DELETE SET NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME
 );
 
-CREATE INDEX idx_withdrawal_requests_status ON withdrawal_requests(status);
-CREATE INDEX idx_withdrawal_requests_user ON withdrawal_requests(telegram_id);
+CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_status ON withdrawal_requests(status);
+CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_user ON withdrawal_requests(telegram_id);
 
 -- 10. Referrals & Commission Ledger (Telegram Invites & 10% Lifetime RevShare)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL;
@@ -157,8 +157,8 @@ CREATE TABLE IF NOT EXISTS referrals (
   created_at DATETIME NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_referrals_referrer ON referrals(referrer_id);
-CREATE INDEX idx_referrals_referee ON referrals(referee_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referee ON referrals(referee_id);
 
 CREATE TABLE IF NOT EXISTS referral_rewards (
   reward_id VARCHAR(64) PRIMARY KEY,
@@ -173,8 +173,8 @@ CREATE TABLE IF NOT EXISTS referral_rewards (
   created_at DATETIME NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_referral_rewards_referrer ON referral_rewards(referrer_id);
-CREATE INDEX idx_referral_rewards_created_at ON referral_rewards(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_created_at ON referral_rewards(created_at DESC);
 
 -- Seed default Super Admin user (password: admin123)
 INSERT IGNORE INTO admin_users (admin_id, username, email, password_hash, role, is_mfa_enabled)
@@ -199,7 +199,7 @@ export async function runMigrations(): Promise<void> {
 }
 
 // Auto-run when executed directly via CLI (e.g. tsx server/migrations.ts)
-const isDirectRun = TINYINT(1)(
+const isDirectRun = Boolean(
   process.argv[1] && (
     process.argv[1].endsWith('migrations.ts') ||
     process.argv[1].endsWith('migrations.js') ||
