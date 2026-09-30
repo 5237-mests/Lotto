@@ -38,7 +38,7 @@ HTTPS / WSS (HMAC WebApp InitData)
 +-----------------------++-----------------------+
 |                                                |
 +-----------v------------+                      +------------v-----------+
-| PostgreSQL / Redis DB  |                      |  TON / Stars Gateway   |
+| MySQL / Redis DB  |                      |  TON / Stars Gateway   |
 +------------------------+                      +------------------------+
 
 ```
@@ -63,7 +63,7 @@ $$\text{Outcome Seed} = \text{HMAC-SHA256}(\text{Server Seed}, \text{Client Seed
 
 ---
 
-## 3. Database Schema (PostgreSQL)
+## 3. Database Schema (MySQL)
 
 ```sql
 -- Users Table
@@ -71,32 +71,32 @@ CREATE TABLE users (
     telegram_id BIGINT PRIMARY KEY,
     username VARCHAR(64),
     first_name VARCHAR(64),
-    balance_coins NUMERIC(18, 4) DEFAULT 0.0000,
+    balance_coins DECIMAL(18, 4) DEFAULT 0.0000,
     balance_stars INT DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE
 );
 
 -- Scheduled Lottery Draws
 CREATE TABLE lottery_draws (
-    draw_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    draw_id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     title VARCHAR(100) NOT NULL,
-    ticket_price NUMERIC(18, 4) NOT NULL,
+    ticket_price DECIMAL(18, 4) NOT NULL,
     currency VARCHAR(10) CHECK (currency IN ('TON', 'STARS', 'COINS')),
-    payout_pool NUMERIC(18, 4) DEFAULT 0.0000,
+    payout_pool DECIMAL(18, 4) DEFAULT 0.0000,
     status VARCHAR(20) CHECK (status IN ('OPEN', 'LOCKED', 'COMPLETED', 'CANCELLED')) DEFAULT 'OPEN',
-    draw_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    draw_time DATETIME NOT NULL,
     winning_numbers INT[],
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- User Purchased Tickets
 CREATE TABLE lottery_tickets (
-    ticket_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    draw_id UUID REFERENCES lottery_draws(draw_id) ON DELETE CASCADE,
+    ticket_id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    draw_id CHAR(36) REFERENCES lottery_draws(draw_id) ON DELETE CASCADE,
     telegram_id BIGINT REFERENCES users(telegram_id),
     selected_numbers INT[] NOT NULL,
-    purchase_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    purchase_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Instant Spinner Configuration
@@ -104,20 +104,20 @@ CREATE TABLE spinner_sectors (
     sector_id INT PRIMARY KEY,
     label VARCHAR(50) NOT NULL,
     prize_type VARCHAR(20) CHECK (prize_type IN ('COINS', 'STARS', 'FREE_TICKET', 'NO_WIN')),
-    prize_value NUMERIC(18, 4) DEFAULT 0,
+    prize_value DECIMAL(18, 4) DEFAULT 0,
     weight INT NOT NULL,
     is_active BOOLEAN DEFAULT TRUE
 );
 
 -- Instant Spinner Audit Logs
 CREATE TABLE spinner_logs (
-    spin_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    spin_id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     telegram_id BIGINT REFERENCES users(telegram_id),
     sector_id INT REFERENCES spinner_sectors(sector_id),
     server_seed VARCHAR(64) NOT NULL,
     client_seed VARCHAR(64) NOT NULL,
     nonce INT NOT NULL,
-    spin_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    spin_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 ```
@@ -404,7 +404,7 @@ export function SpinnerWheel({ initData }) {
 
 ## 6. Execution Roadmap
 
-1. **Environment Setup:** Configure bot credentials via `@BotFather`, expose local server with `ngrok`, and setup PostgreSQL database tables.
+1. **Environment Setup:** Configure bot credentials via `@BotFather`, expose local server with `ngrok`, and setup MySQL database tables.
 2. **Backend Authentication:** Wire `verifyTelegramWebAppData` middleware to secure express routes using the bot HTTP API token.
 3. **Frontend Integration:** Integrate `@twa-dev/sdk`, connect the `SpinnerWheel` component to the backend `/spin` endpoint, and attach Telegram haptic feedback hooks.
 4. **Scheduled Worker Setup:** Configure background jobs using Redis and BullMQ to handle automatic draw payouts at designated intervals.

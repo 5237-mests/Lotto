@@ -139,11 +139,11 @@ export async function recordAdminAudit(
     adminAuditLogs.pop();
   }
 
-  // Persist to Postgres if available
+  // Persist to MySQL if available
   try {
     await query(
       `INSERT INTO admin_audit_logs (log_id, admin_id, admin_username, action, target_resource, payload, ip_address, timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         log.log_id,
         log.admin_id.startsWith('a0000') ? null : log.admin_id, // handle mock vs valid uuid
