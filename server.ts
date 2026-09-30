@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import crypto from 'crypto';
-import { createServer as createViteServer } from 'vite';
 import { verifyTelegramWebAppData, validateTelegramInitData } from './server/auth';
 import { runMigrations } from './server/migrations';
 import { calculateSpinResult, hashServerSeed, DEFAULT_SECTORS } from './ProvablyFairEngine.js';
@@ -16,7 +15,7 @@ import {
 } from './server/referralService';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -705,6 +704,7 @@ app.use((err: Error, req: Request, res: Response, next: (err?: unknown) => void)
 // START SERVER WITH VITE INTEGRATION
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

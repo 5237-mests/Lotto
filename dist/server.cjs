@@ -26,7 +26,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_express3 = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_crypto6 = __toESM(require("crypto"), 1);
-var import_vite = require("vite");
 
 // server/auth.ts
 var import_crypto = __toESM(require("crypto"), 1);
@@ -1753,7 +1752,7 @@ function createReferralRouter(users2) {
 
 // server.ts
 var app = (0, import_express3.default)();
-var PORT = 3e3;
+var PORT = Number(process.env.PORT) || 3e3;
 app.use(import_express3.default.json());
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -2262,7 +2261,8 @@ app.use((err, req, res, next) => {
 });
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
-    const vite = await (0, import_vite.createServer)({
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa"
     });
